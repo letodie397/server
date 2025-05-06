@@ -13,5 +13,6 @@ else
   fi
 fi
 
-# Inicia o servidor com gunicorn
-exec gunicorn --bind 0.0.0.0:$PORT servidor:app 
+# Inicia o servidor com gunicorn usando o caminho completo
+python -m pip install gunicorn
+python -m gunicorn --bind 0.0.0.0:$PORT servidor:app 
