@@ -60,6 +60,15 @@ def index():
         'version': '1.1.0'
     })
 
+# Rota de health check para o Render
+@app.route('/health')
+@app.route('/ping')
+def health_check():
+    return jsonify({
+        'status': 'ok',
+        'message': 'Servidor ativo'
+    })
+
 # Listar todas as tabelas
 @app.route('/tabelas')
 def list_tables():
