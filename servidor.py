@@ -2,8 +2,10 @@ from flask import Flask, jsonify, request
 import sqlite3
 import os
 import json
+from flask_cors import CORS  # Importando a extensão Flask-CORS
 
 app = Flask(__name__)
+CORS(app)  # Habilitando CORS para todas as rotas
 
 # Configuração do banco de dados
 DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
