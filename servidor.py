@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request, make_response, redirect
 import sqlite3
 import os
 import json
@@ -6,13 +6,14 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
-# Configuração de CORS completa
+# Configuração CORS para permitir acesso de qualquer origem
 CORS(app, resources={r"/*": {
     "origins": "*",
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
+    "expose_headers": ["Content-Type", "Authorization"],
     "max_age": 86400
-}})
+}}, supports_credentials=False)
 
 # Configuração do banco de dados
 DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
@@ -26,6 +27,7 @@ def get_db_connection():
 # Adicionar cabeçalhos CORS a todas as respostas
 @app.after_request
 def after_request(response):
+    # Garantir que estes cabeçalhos estejam em todas as respostas
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
@@ -37,11 +39,21 @@ def after_request(response):
 @app.route('/<path:path>', methods=['OPTIONS'])
 def options_handler(path):
     response = make_response()
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.add('Access-Control-Max-Age', '86400')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Max-Age'] = '86400'
     return response
+
+# Redirecionar solicitações com caminho incorreto para a raiz
+@app.route('/ping/<path:path>', methods=['GET'])
+def redirect_ping(path):
+    return redirect('/ping', code=302)
+
+# Redirecionar solicitações com caminho incorreto para a raiz
+@app.route('/health/<path:path>', methods=['GET'])
+def redirect_health(path):
+    return redirect('/health', code=302)
 
 # Rota de health check para o Render
 @app.route('/health')
@@ -69,8 +81,17 @@ def index():
     return jsonify({
         'message': 'API do servidor funcionando!',
         'cors': 'habilitado',
-        'version': '1.1.0'
+        'version': '1.2.0'
     })
+
+# Tratamento de erros 404
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({
+        'error': 'Rota não encontrada',
+        'status': 404,
+        'message': 'A URL solicitada não existe neste servidor.'
+    }), 404
 
 # Listar todas as tabelas
 @app.route('/tabelas')
@@ -88,6 +109,10 @@ def list_tables():
 # Obter todos os registros de uma tabela
 @app.route('/<tabela>', methods=['GET'])
 def get_all(tabela):
+    # Se for uma das rotas especiais, redirecionar
+    if tabela in ['ping', 'health']:
+        return redirect(f'/{tabela}', code=302)
+        
     conn = get_db_connection()
     cursor = conn.cursor()
     
