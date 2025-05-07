@@ -2,16 +2,15 @@ from flask import Flask, jsonify, request, make_response
 import sqlite3
 import os
 import json
-from flask_cors import CORS  # Importando a extensão Flask-CORS
+from flask_cors import CORS
 
 app = Flask(__name__)
 
-# Remover configuração anterior de CORS e usar uma nova abordagem
+# Configuração de CORS completa
 CORS(app, resources={r"/*": {
     "origins": "*",
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
-    "supports_credentials": True,
     "max_age": 86400
 }})
 
@@ -24,29 +23,34 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Adicionar cabeçalhos CORS a TODAS as respostas (middleware)
+# Adicionar cabeçalhos CORS a todas as respostas
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.add('Access-Control-Max-Age', '86400')  # 24 horas em segundos
-    # Remover o header que pode estar causando problemas
-    if 'Access-Control-Allow-Credentials' in response.headers:
-        response.headers.pop('Access-Control-Allow-Credentials')
+    response.headers.add('Access-Control-Max-Age', '86400')
     return response
 
-# Rota para lidar com preflight OPTIONS - responder a todas as solicitações OPTIONS com 200
+# Rota OPTIONS global para preflight requests
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
 def options_handler(path):
     response = make_response()
-    response.status_code = 200
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.add('Access-Control-Max-Age', '86400')  # 24 horas
+    response.headers.add('Access-Control-Max-Age', '86400')
     return response
+
+# Rota de health check para o Render
+@app.route('/health')
+@app.route('/ping')
+def health_check():
+    return jsonify({
+        'status': 'ok',
+        'message': 'Servidor ativo'
+    })
 
 # Função para converter objetos JSON armazenados como string de volta para objetos Python
 def parse_json_fields(data):
@@ -66,15 +70,6 @@ def index():
         'message': 'API do servidor funcionando!',
         'cors': 'habilitado',
         'version': '1.1.0'
-    })
-
-# Rota de health check para o Render
-@app.route('/health')
-@app.route('/ping')
-def health_check():
-    return jsonify({
-        'status': 'ok',
-        'message': 'Servidor ativo'
     })
 
 # Listar todas as tabelas
