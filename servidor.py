@@ -6,7 +6,7 @@ import json
 app = Flask(__name__)
 
 # Configuração do banco de dados
-DATABASE_URL = os.environ.get('DATABASE_URL', 'meu_banco.db')
+DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
 
 # Função para obter conexão com o banco
 def get_db_connection():
