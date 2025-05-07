@@ -5,7 +5,10 @@ import json
 from flask_cors import CORS  # Importando a extensão Flask-CORS
 
 app = Flask(__name__)
-CORS(app)  # Habilitando CORS para todas as rotas
+
+# Configuração de CORS mais detalhada
+CORS(app, resources={r"/*": {"origins": "*", "allow_headers": ["Content-Type", "Authorization"], 
+                           "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}})
 
 # Configuração do banco de dados
 DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
@@ -15,6 +18,15 @@ def get_db_connection():
     conn = sqlite3.connect(DATABASE_URL)
     conn.row_factory = sqlite3.Row
     return conn
+
+# Adicionar cabeçalhos CORS a todas as respostas
+@app.after_request
+def add_cors_headers(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # Função para converter objetos JSON armazenados como string de volta para objetos Python
 def parse_json_fields(data):
