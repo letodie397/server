@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 import sqlite3
 import os
 import json
@@ -28,6 +28,18 @@ def add_cors_headers(response):
     response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
+# Rota para lidar com preflight OPTIONS
+@app.route('/', methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path=""):
+    response = make_response()
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Max-Age', '86400')  # 24 horas
+    return response
+
 # Função para converter objetos JSON armazenados como string de volta para objetos Python
 def parse_json_fields(data):
     if isinstance(data, dict):
@@ -42,7 +54,11 @@ def parse_json_fields(data):
 # Rota principal
 @app.route('/')
 def index():
-    return jsonify({'message': 'API do servidor funcionando!'})
+    return jsonify({
+        'message': 'API do servidor funcionando!',
+        'cors': 'habilitado',
+        'version': '1.1.0'
+    })
 
 # Listar todas as tabelas
 @app.route('/tabelas')
