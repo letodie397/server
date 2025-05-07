@@ -6,9 +6,14 @@ from flask_cors import CORS  # Importando a extensão Flask-CORS
 
 app = Flask(__name__)
 
-# Configuração de CORS mais detalhada
-CORS(app, resources={r"/*": {"origins": "*", "allow_headers": ["Content-Type", "Authorization"], 
-                           "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}})
+# Remover configuração anterior de CORS e usar uma nova abordagem
+CORS(app, resources={r"/*": {
+    "origins": "*",
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
+    "supports_credentials": True,
+    "max_age": 86400
+}})
 
 # Configuração do banco de dados
 DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
@@ -19,24 +24,27 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Adicionar cabeçalhos CORS a todas as respostas
+# Adicionar cabeçalhos CORS a TODAS as respostas (middleware)
 @app.after_request
-def add_cors_headers(response):
+def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.add('Access-Control-Max-Age', '86400')  # 24 horas em segundos
+    # Remover o header que pode estar causando problemas
+    if 'Access-Control-Allow-Credentials' in response.headers:
+        response.headers.pop('Access-Control-Allow-Credentials')
     return response
 
-# Rota para lidar com preflight OPTIONS
-@app.route('/', methods=['OPTIONS'])
+# Rota para lidar com preflight OPTIONS - responder a todas as solicitações OPTIONS com 200
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
-def options_handler(path=""):
+def options_handler(path):
     response = make_response()
+    response.status_code = 200
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     response.headers.add('Access-Control-Max-Age', '86400')  # 24 horas
     return response
 
