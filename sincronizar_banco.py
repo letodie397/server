@@ -10,6 +10,7 @@ from datetime import datetime
 BANCO_LOCAL = 'C:\\sqlite\\meu_banco.db'
 API_URL = 'https://server-qx03.onrender.com'  # Substitua pelo seu URL do Render
 INTERVALO_SYNC = 300  # Sincronizar a cada 5 minutos
+PRIORIZAR_LOCAL = True  # Priorizar dados locais em caso de conflito
 
 def obter_tabelas_local():
     """Obtém a lista de tabelas do banco de dados local"""
@@ -134,12 +135,24 @@ def criar_tabela_local(tabela, campos):
     conn.close()
     return True
 
+def obter_ultima_modificacao_local(tabela, id_registro):
+    """Simula a obtenção da data de última modificação local (não implementado ainda)"""
+    # Em uma implementação real, você pode adicionar um campo de timestamp na tabela
+    # Por enquanto, consideramos que local é sempre mais recente se a opção estiver ativa
+    return PRIORIZAR_LOCAL
+
 def sincronizar():
     """Sincroniza os bancos de dados local e Render"""
     print(f"[{datetime.now()}] Iniciando sincronização...")
     
     # Certifica-se de que o diretório do banco existe
     os.makedirs(os.path.dirname(BANCO_LOCAL), exist_ok=True)
+    
+    # Cria o banco se não existir
+    if not os.path.exists(BANCO_LOCAL):
+        print(f"Banco de dados local não encontrado. Criando em {BANCO_LOCAL}")
+        conn = sqlite3.connect(BANCO_LOCAL)
+        conn.close()
     
     # Obtém as tabelas de ambos os bancos
     tabelas_local = obter_tabelas_local()
@@ -163,19 +176,19 @@ def sincronizar():
         # Agora obtém os dados locais (após possível criação da tabela)
         dados_local = obter_dados_tabela_local(tabela) if tabela in tabelas_local else {}
         
-        # Processa registros do Render para o local
-        for id_registro, dados in dados_render.items():
-            # Se não existe localmente ou os dados são diferentes
-            if id_registro not in dados_local or dados_local[id_registro] != dados:
-                atualizar_registro_local(tabela, id_registro, dados)
-                print(f"  Atualizado registro {id_registro} na tabela {tabela} (local)")
-        
-        # Processa registros do local para o Render
+        # Processa registros do local para o Render (PRIORIDADE)
         for id_registro, dados in dados_local.items():
-            # Se não existe no Render ou os dados são diferentes
-            if id_registro not in dados_render or dados_render[id_registro] != dados:
+            # Se não existe no Render ou os dados locais têm prioridade
+            if id_registro not in dados_render or PRIORIZAR_LOCAL:
                 atualizar_registro_render(tabela, id_registro, dados)
-                print(f"  Atualizado registro {id_registro} na tabela {tabela} (Render)")
+                print(f"  Enviado registro {id_registro} da tabela {tabela} para o Render")
+        
+        # Processa registros do Render para o local (APENAS NOVOS REGISTROS)
+        for id_registro, dados in dados_render.items():
+            # Apenas se não existir localmente (não sobrescreve dados locais)
+            if id_registro not in dados_local:
+                atualizar_registro_local(tabela, id_registro, dados)
+                print(f"  Baixado novo registro {id_registro} da tabela {tabela} para o local")
     
     print(f"[{datetime.now()}] Sincronização concluída!")
 
@@ -191,6 +204,10 @@ def sincronizar_continuamente():
         time.sleep(INTERVALO_SYNC)
 
 if __name__ == "__main__":
+    # Exibe mensagem sobre priorização de dados
+    if PRIORIZAR_LOCAL:
+        print("MODO PRIORIDADE LOCAL: Os dados do seu PC terão prioridade sobre os dados no Render")
+    
     # Verifica se é para sincronizar uma vez ou continuamente
     if len(sys.argv) > 1 and sys.argv[1] == "--once":
         sincronizar()
