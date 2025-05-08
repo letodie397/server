@@ -10,10 +10,10 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {
     "origins": "*",
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin"],
-    "expose_headers": ["Content-Type", "Authorization"],
+    "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    "expose_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     "max_age": 86400
-}}, supports_credentials=False)
+}}, supports_credentials=True)
 
 # Configuração do banco de dados
 DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
@@ -24,14 +24,63 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# Garantir que o banco de dados tenha a tabela 'churches'
+def ensure_tables_exist():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Criar tabela churches se não existir
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS churches (
+        id TEXT PRIMARY KEY,
+        nome TEXT,
+        morada TEXT,
+        ano TEXT,
+        agendamento TEXT,
+        autorizadoFilippi TEXT,
+        arquivada INTEGER DEFAULT 0,
+        dados TEXT
+    )
+    ''')
+    
+    # Verificar se há registros na tabela churches
+    cursor.execute("SELECT COUNT(*) FROM churches")
+    count = cursor.fetchone()[0]
+    
+    # Se não houver registros, adicionar um exemplo
+    if count == 0:
+        cursor.execute('''
+        INSERT INTO churches (id, nome, morada, ano, agendamento, autorizadoFilippi, arquivada, dados)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            'demo1', 
+            'Igreja Exemplo', 
+            'Rua de Exemplo, 123', 
+            '2023', 
+            'Sim', 
+            'Sim', 
+            0, 
+            json.dumps({"info": "Dados de exemplo para teste"})
+        ))
+    
+    conn.commit()
+    conn.close()
+    print(f"Banco de dados inicializado em {DATABASE_URL}")
+
 # Adicionar cabeçalhos CORS a todas as respostas
 @app.after_request
 def after_request(response):
     # Garantir que estes cabeçalhos estejam em todas as respostas
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     response.headers.add('Access-Control-Max-Age', '86400')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    
+    # Prevenir problema com cache
+    response.headers.add('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    response.headers.add('Pragma', 'no-cache')
+    response.headers.add('Expires', '0')
     return response
 
 # Rota OPTIONS global para preflight requests
@@ -40,10 +89,54 @@ def after_request(response):
 def options_handler(path):
     response = make_response()
     response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin, X-Requested-With'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     response.headers['Access-Control-Max-Age'] = '86400'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
+
+# Verificar se o banco de dados está acessível
+@app.route('/check-db')
+def check_db():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Verificar quais tabelas existem
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tabelas = [row['name'] for row in cursor.fetchall() if row['name'] != 'sqlite_sequence']
+        
+        # Testar a conexão com cada tabela
+        resultados = {}
+        for tabela in tabelas:
+            try:
+                cursor.execute(f"SELECT COUNT(*) as count FROM {tabela}")
+                count = cursor.fetchone()['count']
+                resultados[tabela] = {
+                    "status": "ok",
+                    "registros": count
+                }
+            except Exception as e:
+                resultados[tabela] = {
+                    "status": "erro",
+                    "mensagem": str(e)
+                }
+        
+        conn.close()
+        
+        return jsonify({
+            "status": "ok",
+            "mensagem": "Banco de dados acessível",
+            "caminho": DATABASE_URL,
+            "tabelas": tabelas,
+            "detalhes": resultados
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "erro",
+            "mensagem": f"Erro ao acessar banco de dados: {str(e)}",
+            "caminho": DATABASE_URL
+        }), 500
 
 # Redirecionar solicitações com caminho incorreto para a raiz
 @app.route('/ping/<path:path>', methods=['GET'])
@@ -61,7 +154,9 @@ def redirect_health(path):
 def health_check():
     return jsonify({
         'status': 'ok',
-        'message': 'Servidor ativo'
+        'message': 'Servidor ativo',
+        'cors': 'habilitado',
+        'version': '1.3.0'
     })
 
 # Função para converter objetos JSON armazenados como string de volta para objetos Python
@@ -81,7 +176,7 @@ def index():
     return jsonify({
         'message': 'API do servidor funcionando!',
         'cors': 'habilitado',
-        'version': '1.2.0'
+        'version': '1.3.0'
     })
 
 # Tratamento de erros 404
@@ -92,6 +187,15 @@ def not_found(e):
         'status': 404,
         'message': 'A URL solicitada não existe neste servidor.'
     }), 404
+
+# Tratamento de erros 500
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({
+        'error': 'Erro interno do servidor',
+        'status': 500,
+        'message': str(e)
+    }), 500
 
 # Listar todas as tabelas
 @app.route('/tabelas')
@@ -110,7 +214,7 @@ def list_tables():
 @app.route('/<tabela>', methods=['GET'])
 def get_all(tabela):
     # Se for uma das rotas especiais, redirecionar
-    if tabela in ['ping', 'health']:
+    if tabela in ['ping', 'health', 'check-db']:
         return redirect(f'/{tabela}', code=302)
         
     conn = get_db_connection()
@@ -132,7 +236,11 @@ def get_all(tabela):
         return jsonify(resultado)
     except sqlite3.Error as e:
         conn.close()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e),
+            'message': f'Erro ao acessar tabela {tabela}. Verifique se a tabela existe.',
+            'sugestão': 'Use a rota /tabelas para listar as tabelas disponíveis.'
+        }), 500
 
 # Obter um registro específico
 @app.route('/<tabela>/<id>', methods=['GET'])
@@ -234,6 +342,9 @@ def delete(tabela, id):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # Garantir que as tabelas existam antes de iniciar o servidor
+    ensure_tables_exist()
+    
     # Configuração para deploy no Render
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port) 

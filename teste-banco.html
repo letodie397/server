@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Banco de Dados</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            background-color: #f9f9f9;
+        }
+
+        header {
+            background-color: #3b82f6;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0;
+        }
+
+        .subtitle {
+            font-weight: normal;
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #status-indicator {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e0f2ff;
+            border-radius: 5px;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #2563eb;
+        }
+
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+            border-top: 1px solid #eee;
+        }
+
+        .test-result {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border-left: 5px solid #ccc;
+        }
+
+        .test-result.success {
+            background-color: #e6f7e6;
+            border-left-color: #4CAF50;
+        }
+
+        .test-result.error {
+            background-color: #ffeaea;
+            border-left-color: #f44336;
+        }
+
+        .test-result.info {
+            background-color: #e0f2ff;
+            border-left-color: #3b82f6;
+        }
+
+        .test-result h3 {
+            margin-top: 0;
+        }
+
+        .status {
+            font-weight: bold;
+        }
+
+        .status.success {
+            color: #4CAF50;
+        }
+
+        .status.error {
+            color: #f44336;
+        }
+
+        .status.info {
+            color: #3b82f6;
+        }
+
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .data-table th {
+            background-color: #f0f0f0;
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        .data-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        /* Novo seletor de tabela */
+        .table-selector {
+            margin: 20px 0;
+        }
+
+        .table-selector select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        .input-group {
+            margin: 15px 0;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Teste de Banco de Dados SQLite</h1>
+        <p class="subtitle">Visualizador de Dados no Render</p>
+    </header>
+
+    <div class="container">
+        <div id="status-indicator">
+            <p>Conectando ao servidor...</p>
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Inicializando</p>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button id="check-connection" class="btn">Verificar Conexão</button>
+            <button id="list-tables" class="btn">Listar Tabelas</button>
+            <button id="run-diagnostics" class="btn" style="background-color: #10b981;">Diagnóstico Avançado</button>
+            <button id="server-toggle" class="btn" style="background-color: #8b5cf6;">Usar Servidor Local</button>
+            <button id="clear-results" class="btn" style="background-color: #64748b;">Limpar Resultados</button>
+        </div>
+
+        <div class="table-selector" style="display: none;">
+            <label for="table-select">Selecione uma tabela:</label>
+            <select id="table-select">
+                <option value="">-- Selecione --</option>
+            </select>
+            <button id="view-table" class="btn">Visualizar Dados</button>
+        </div>
+
+        <div class="input-group" style="display: none;">
+            <label for="record-id">Consultar registro específico (ID):</label>
+            <input type="text" id="record-id" placeholder="Digite o ID do registro">
+            <button id="view-record" class="btn" style="margin-top: 10px;">Buscar Registro</button>
+        </div>
+
+        <div id="test-results">
+            <!-- Aqui serão exibidos os resultados dos testes -->
+        </div>
+    </div>
+
+    <footer>
+        <p>Esta ferramenta ajuda a verificar a conexão com o banco de dados SQLite no servidor Render.</p>
+        <p>Desenvolvido para facilitar o diagnóstico e visualização dos dados.</p>
+    </footer>
+
+    <script>
+        // URL do servidor
+        const API_URL = 'https://server-qx03.onrender.com';
+        const API_URL_LOCAL = 'http://localhost:5000';
+        let currentServer = API_URL;
+        let currentTable = '';
+
+        // Função para alternar entre servidor Render e servidor local
+        function toggleServer() {
+            currentServer = currentServer === API_URL ? API_URL_LOCAL : API_URL;
+            document.getElementById('server-toggle').textContent =
+                currentServer === API_URL ? 'Usar Servidor Local' : 'Usar Servidor Render';
+            document.getElementById('status-indicator').innerHTML = `
+                <p>Servidor alterado para: ${currentServer}</p>
+            `;
+        }
+
+        // Função para mostrar resultados
+        function showResult(title, status, message, details = null) {
+            const container = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${status}`;
+
+            let detailsHtml = '';
+            if (details) {
+                if (typeof details === 'object') {
+                    detailsHtml = `<pre>${JSON.stringify(details, null, 2)}</pre>`;
+                } else {
+                    detailsHtml = details;
+                }
+            }
+
+            resultDiv.innerHTML = `
+                <h3>${title}</h3>
+                <p class="status ${status}">${status.toUpperCase()}</p>
+                <p>${message}</p>
+                ${detailsHtml}
+            `;
+
+            container.prepend(resultDiv);
+        }
+
+        // Função para criar tabela HTML a partir dos dados
+        function createTableHTML(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p>Nenhum dado encontrado</p>';
+            }
+
+            const keys = Object.keys(data);
+            const firstItem = data[keys[0]];
+            const columns = ['id', ...Object.keys(firstItem)];
+
+            let html = '<table class="data-table">';
+
+            // Cabeçalho
+            html += '<thead><tr>';
+            columns.forEach(col => {
+                html += `<th>${col}</th>`;
+            });
+            html += '</tr></thead>';
+
+            // Corpo
+            html += '<tbody>';
+            Object.entries(data).forEach(([id, rowData]) => {
+                html += '<tr>';
+                html += `<td>${id}</td>`;
+
+                Object.entries(rowData).forEach(([key, value]) => {
+                    let displayValue = '';
+
+                    if (value === null) {
+                        displayValue = '<em>null</em>';
+                    } else if (typeof value === 'object') {
+                        displayValue = `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+                    } else {
+                        displayValue = value.toString();
+                    }
+
+                    html += `<td>${displayValue}</td>`;
+                });
+
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+
+            return html;
+        }
+
+        // Verificar conexão com o servidor
+        async function checkConnection() {
+            try {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Verificando conexão com o servidor...</p>
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Aguarde</p>
+                    </div>
+                `;
+
+                const startTime = Date.now();
+                const response = await fetch(`${currentServer}/?t=${Date.now()}`);
+                const elapsed = Date.now() - startTime;
+
+                const data = await response.json();
+
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Servidor conectado! Tempo de resposta: ${elapsed}ms</p>
+                `;
+
+                showResult(
+                    "Verificação do Servidor",
+                    "success",
+                    `Servidor respondeu em ${elapsed}ms`,
+                    data
+                );
+
+                return true;
+            } catch (error) {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Erro ao conectar com o servidor!</p>
+                `;
+
+                // Mostrar informações mais detalhadas sobre o erro
+                const errorDetails = {
+                    message: error.message,
+                    name: error.name,
+                    stack: error.stack,
+                    timestamp: new Date().toISOString(),
+                    api_url: currentServer
+                };
+
+                showResult(
+                    "Verificação do Servidor",
+                    "error",
+                    `Falha na conexão: ${error.message}`,
+                    errorDetails
+                );
+
+                return false;
+            }
+        }
+
+        // Listar tabelas no banco de dados
+        async function listTables() {
+            try {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Consultando tabelas do banco de dados...</p>
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Aguarde</p>
+                    </div>
+                `;
+
+                const response = await fetch(`${currentServer}/tabelas?t=${Date.now()}`);
+
+                if (!response.ok) {
+                    throw new Error(`Erro ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const tables = data.tabelas || [];
+
+                if (tables.length === 0) {
+                    document.getElementById('status-indicator').innerHTML = `
+                        <p>Nenhuma tabela encontrada no banco de dados.</p>
+                    `;
+
+                    showResult(
+                        "Listagem de Tabelas",
+                        "info",
+                        `Nenhuma tabela encontrada no banco de dados.`
+                    );
+                } else {
+                    document.getElementById('status-indicator').innerHTML = `
+                        <p>${tables.length} tabela(s) encontrada(s) no banco de dados.</p>
+                    `;
+
+                    // Preencher o seletor de tabelas
+                    const tableSelect = document.getElementById('table-select');
+                    tableSelect.innerHTML = '<option value="">-- Selecione uma tabela --</option>';
+
+                    tables.forEach(table => {
+                        const option = document.createElement('option');
+                        option.value = table;
+                        option.textContent = table;
+                        tableSelect.appendChild(option);
+                    });
+
+                    // Mostrar o seletor de tabelas
+                    document.querySelector('.table-selector').style.display = 'block';
+
+                    showResult(
+                        "Listagem de Tabelas",
+                        "success",
+                        `${tables.length} tabela(s) encontrada(s)`,
+                        { tabelas: tables }
+                    );
+                }
+
+                return tables;
+            } catch (error) {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Erro ao listar tabelas!</p>
+                `;
+
+                showResult(
+                    "Listagem de Tabelas",
+                    "error",
+                    `Falha ao listar tabelas: ${error.message}`
+                );
+
+                return [];
+            }
+        }
+
+        // Visualizar dados de uma tabela
+        async function viewTableData(table) {
+            try {
+                if (!table) {
+                    showResult(
+                        "Visualização de Dados",
+                        "error",
+                        "Nenhuma tabela selecionada."
+                    );
+                    return;
+                }
+
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Consultando dados da tabela "${table}"...</p>
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Aguarde</p>
+                    </div>
+                `;
+
+                const response = await fetch(`${currentServer}/${table}?t=${Date.now()}`);
+
+                if (!response.ok) {
+                    throw new Error(`Erro ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const recordCount = Object.keys(data).length;
+
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>${recordCount} registro(s) encontrado(s) na tabela "${table}".</p>
+                `;
+
+                // Mostar o campo de busca de registro específico
+                document.querySelector('.input-group').style.display = 'block';
+                currentTable = table;
+
+                // Criar e mostrar a tabela HTML
+                const tableHTML = createTableHTML(data);
+
+                showResult(
+                    `Dados da Tabela "${table}"`,
+                    "success",
+                    `${recordCount} registro(s) encontrado(s)`,
+                    tableHTML
+                );
+            } catch (error) {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Erro ao consultar dados!</p>
+                `;
+
+                showResult(
+                    `Dados da Tabela "${table}"`,
+                    "error",
+                    `Falha ao consultar dados: ${error.message}`
+                );
+            }
+        }
+
+        // Buscar registro específico
+        async function viewRecord(table, id) {
+            try {
+                if (!table || !id) {
+                    showResult(
+                        "Busca de Registro",
+                        "error",
+                        "Tabela ou ID não especificados."
+                    );
+                    return;
+                }
+
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Buscando registro com ID "${id}" na tabela "${table}"...</p>
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Aguarde</p>
+                    </div>
+                `;
+
+                const response = await fetch(`${currentServer}/${table}/${id}?t=${Date.now()}`);
+
+                if (response.status === 404) {
+                    document.getElementById('status-indicator').innerHTML = `
+                        <p>Registro não encontrado.</p>
+                    `;
+
+                    showResult(
+                        `Busca de Registro`,
+                        "info",
+                        `Registro com ID "${id}" não encontrado na tabela "${table}".`
+                    );
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Erro ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Registro encontrado com sucesso!</p>
+                `;
+
+                showResult(
+                    `Registro ID "${id}" da Tabela "${table}"`,
+                    "success",
+                    `Dados do registro:`,
+                    data
+                );
+            } catch (error) {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Erro ao buscar registro!</p>
+                `;
+
+                showResult(
+                    `Busca de Registro`,
+                    "error",
+                    `Falha ao buscar registro: ${error.message}`
+                );
+            }
+        }
+
+        // Função para realizar um diagnóstico avançado
+        async function runDiagnostics() {
+            try {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Executando diagnóstico avançado...</p>
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Aguarde</p>
+                    </div>
+                `;
+
+                // Testes a serem realizados
+                const tests = [
+                    { name: "Endpoint Raiz", url: `${currentServer}/?t=${Date.now()}` },
+                    { name: "Health Check", url: `${currentServer}/health?t=${Date.now()}` },
+                    { name: "Ping", url: `${currentServer}/ping?t=${Date.now()}` },
+                    { name: "Listagem de Tabelas", url: `${currentServer}/tabelas?t=${Date.now()}` }
+                ];
+
+                const results = {
+                    timestamp: new Date().toISOString(),
+                    server: currentServer,
+                    tests: []
+                };
+
+                for (const test of tests) {
+                    try {
+                        const startTime = Date.now();
+                        const response = await fetch(test.url);
+                        const elapsed = Date.now() - startTime;
+
+                        let data;
+                        try {
+                            data = await response.json();
+                        } catch (e) {
+                            data = { error: "Não foi possível converter a resposta para JSON" };
+                        }
+
+                        results.tests.push({
+                            name: test.name,
+                            url: test.url,
+                            status: response.status,
+                            statusText: response.statusText,
+                            responseTime: elapsed,
+                            success: response.ok,
+                            data: data,
+                            headers: Object.fromEntries([...response.headers.entries()])
+                        });
+
+                    } catch (error) {
+                        results.tests.push({
+                            name: test.name,
+                            url: test.url,
+                            success: false,
+                            error: error.message
+                        });
+                    }
+                }
+
+                // Verificar CORS
+                results.corsTest = {
+                    testName: "Teste de CORS",
+                    description: "Verificando se o servidor tem cabeçalhos CORS configurados corretamente"
+                };
+
+                try {
+                    const corsResponse = await fetch(`${currentServer}/`, {
+                        method: 'OPTIONS',
+                        headers: {
+                            'Origin': window.location.origin,
+                            'Access-Control-Request-Method': 'GET',
+                            'Access-Control-Request-Headers': 'Content-Type'
+                        }
+                    });
+
+                    const corsHeaders = Object.fromEntries([...corsResponse.headers.entries()]);
+
+                    results.corsTest.success =
+                        corsHeaders['access-control-allow-origin'] !== undefined &&
+                        corsHeaders['access-control-allow-methods'] !== undefined;
+
+                    results.corsTest.headers = corsHeaders;
+                    results.corsTest.status = corsResponse.status;
+
+                } catch (error) {
+                    results.corsTest.success = false;
+                    results.corsTest.error = error.message;
+                }
+
+                // Calcular estatísticas
+                const successfulTests = results.tests.filter(t => t.success).length;
+                results.summary = {
+                    total: results.tests.length,
+                    successful: successfulTests,
+                    failed: results.tests.length - successfulTests,
+                    hasCorsProblem: !results.corsTest.success
+                };
+
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Diagnóstico concluído: ${successfulTests} de ${results.tests.length} testes bem-sucedidos.</p>
+                `;
+
+                showResult(
+                    "Diagnóstico Avançado",
+                    successfulTests === results.tests.length ? "success" : "error",
+                    `Resultado do diagnóstico: ${successfulTests} de ${results.tests.length} testes bem-sucedidos.`,
+                    results
+                );
+
+            } catch (error) {
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Erro ao executar diagnóstico!</p>
+                `;
+
+                showResult(
+                    "Diagnóstico Avançado",
+                    "error",
+                    `Falha ao executar diagnóstico: ${error.message}`,
+                    { error: error.message, stack: error.stack }
+                );
+            }
+        }
+
+        // Configurar eventos
+        document.addEventListener('DOMContentLoaded', function () {
+            // Verificar conexão
+            document.getElementById('check-connection').addEventListener('click', checkConnection);
+
+            // Listar tabelas
+            document.getElementById('list-tables').addEventListener('click', listTables);
+
+            // Diagnóstico avançado
+            document.getElementById('run-diagnostics').addEventListener('click', runDiagnostics);
+
+            // Alternar servidor
+            document.getElementById('server-toggle').addEventListener('click', toggleServer);
+
+            // Visualizar tabela
+            document.getElementById('view-table').addEventListener('click', function () {
+                const tableSelect = document.getElementById('table-select');
+                const selectedTable = tableSelect.value;
+                viewTableData(selectedTable);
+            });
+
+            // Buscar registro específico
+            document.getElementById('view-record').addEventListener('click', function () {
+                const recordId = document.getElementById('record-id').value.trim();
+                if (!recordId) {
+                    showResult(
+                        "Busca de Registro",
+                        "error",
+                        "Por favor, informe o ID do registro."
+                    );
+                    return;
+                }
+                viewRecord(currentTable, recordId);
+            });
+
+            // Limpar resultados
+            document.getElementById('clear-results').addEventListener('click', function () {
+                document.getElementById('test-results').innerHTML = '';
+                document.getElementById('status-indicator').innerHTML = `
+                    <p>Resultados limpos.</p>
+                `;
+            });
+
+            // Verificar conexão automaticamente
+            checkConnection().then(success => {
+                if (success) {
+                    // Se a conexão for bem-sucedida, listar tabelas automaticamente
+                    listTables();
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

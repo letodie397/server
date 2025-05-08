@@ -128,16 +128,27 @@
         <div id="churches-container"></div>
     </div>
 
+    <script src="config.js"></script>
+    <script src="database-service.js"></script>
     <script>
-        // Configuração do servidor
-        let remoteServer = "https://app-server-fk9l.onrender.com";
-        let localServer = "http://localhost:5000";
+        // Configuração do servidor usando config.js se disponível
+        let remoteServer = typeof CONFIG !== 'undefined' ? CONFIG.RENDER_URL : "https://server-qx03.onrender.com";
+        let localServer = typeof CONFIG !== 'undefined' ? CONFIG.LOCAL_URL : "http://localhost:5000";
         let currentServer = localServer; // Começa com o servidor local
 
         document.addEventListener('DOMContentLoaded', function () {
             // Botões
             document.getElementById('load-data').addEventListener('click', loadChurches);
             document.getElementById('toggle-server').addEventListener('click', toggleServer);
+
+            // Inicializar database service
+            if (typeof dbService !== 'undefined') {
+                console.log('Usando Database Service para carregar dados');
+                // Atualizar URL do servidor no serviço
+                dbService.serverUrl = currentServer;
+            } else {
+                console.warn('Database Service não encontrado, usando Fetch API diretamente');
+            }
 
             // Carregar igrejas automaticamente
             loadChurches();
@@ -158,6 +169,11 @@
                 <p>Servidor alterado para: ${currentServer}</p>
             `;
 
+            // Atualizar URL no serviço de banco de dados
+            if (typeof dbService !== 'undefined') {
+                dbService.serverUrl = currentServer;
+            }
+
             // Recarregar dados
             loadChurches();
         }
@@ -169,16 +185,52 @@
                     <p>Carregando dados das igrejas de ${currentServer}...</p>
                 `;
 
-                const response = await fetch(`${currentServer}/churches?t=${Date.now()}`);
+                let data;
+                const useLocalServer = (currentServer === localServer);
 
-                if (!response.ok) {
-                    throw new Error(`Erro ao carregar dados: ${response.status} ${response.statusText}`);
+                // Tenta usar o serviço de banco de dados, se disponível
+                if (typeof dbService !== 'undefined') {
+                    try {
+                        if (useLocalServer) {
+                            // Conexão direta para servidor local
+                            const response = await fetch(`${currentServer}/churches?t=${Date.now()}`, {
+                                method: 'GET',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'Cache-Control': 'no-cache'
+                                }
+                            });
+
+                            if (!response.ok) {
+                                throw new Error(`Erro ao carregar dados: ${response.status} ${response.statusText}`);
+                            }
+
+                            data = await response.json();
+                        } else {
+                            // Para servidor remoto, usar dbService que já tem as estratégias de fallback
+                            data = await dbService.fetchChurches();
+                        }
+                    } catch (serviceError) {
+                        console.warn('Erro ao usar Database Service, tentando métodos alternativos:', serviceError);
+                        // Continua para o fallback
+                        data = null;
+                    }
                 }
 
-                const data = await response.json();
-                const churchIds = Object.keys(data);
+                // Se o database service falhar ou não estiver disponível, usar estratégia de fallback
+                if (!data) {
+                    if (typeof CONFIG !== 'undefined' && CONFIG.getWithFallback) {
+                        // Usar método centralizado de fallback se disponível
+                        data = await CONFIG.getWithFallback('/churches', useLocalServer);
+                    } else {
+                        // Fallback manual usando múltiplos métodos
+                        data = await fallbackFetchChurches(currentServer);
+                    }
+                }
 
-                if (churchIds.length === 0) {
+                const churchIds = Object.keys(data || {});
+
+                if (!data || churchIds.length === 0) {
                     document.getElementById('status').innerHTML = `
                         <p>Nenhuma igreja encontrada no banco de dados.</p>
                     `;
@@ -189,6 +241,15 @@
                         </div>
                     `;
                     return;
+                }
+
+                // Salvar dados no localStorage para cache
+                try {
+                    const cacheKey = typeof CONFIG !== 'undefined' ?
+                        CONFIG.CACHE.KEYS.CHURCHES_DATA : 'churchesData';
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
+                } catch (e) {
+                    console.warn('Erro ao salvar dados no localStorage:', e);
                 }
 
                 document.getElementById('status').innerHTML = `
@@ -237,9 +298,89 @@
             } catch (error) {
                 document.getElementById('status').innerHTML = `
                     <p style="color: red;">Erro: ${error.message}</p>
+                    <p>Tente usar um proxy CORS ou verificar se o servidor está funcionando.</p>
                 `;
                 console.error('Erro ao carregar igrejas:', error);
             }
+        }
+
+        // Função de fallback para buscar dados de igrejas usando múltiplos métodos
+        async function fallbackFetchChurches(serverUrl) {
+            const timestamp = Date.now();
+            const endpoint = `/churches?t=${timestamp}`;
+
+            // 1. Tentar conexão direta com fetch padrão
+            try {
+                console.log(`Tentando conexão direta com ${serverUrl}${endpoint}`);
+                const response = await fetch(`${serverUrl}${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    },
+                    mode: 'cors',
+                    cache: 'no-store'
+                });
+
+                if (response.ok) {
+                    console.log('Conexão direta bem-sucedida');
+                    return await response.json();
+                } else {
+                    console.warn(`Conexão direta falhou: ${response.status}`);
+                }
+            } catch (error) {
+                console.warn('Erro na conexão direta:', error);
+            }
+
+            // 2. Tentar via AllOrigins
+            try {
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(serverUrl + endpoint)}`;
+                console.log(`Tentando via AllOrigins: ${proxyUrl}`);
+
+                const response = await fetch(proxyUrl);
+                if (response.ok) {
+                    console.log('Conexão via AllOrigins bem-sucedida');
+                    return await response.json();
+                } else {
+                    console.warn(`AllOrigins falhou: ${response.status}`);
+                }
+            } catch (error) {
+                console.warn('Erro no proxy AllOrigins:', error);
+            }
+
+            // 3. Tentar via corsproxy.io
+            try {
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(serverUrl + endpoint)}`;
+                console.log(`Tentando via corsproxy.io: ${proxyUrl}`);
+
+                const response = await fetch(proxyUrl);
+                if (response.ok) {
+                    console.log('Conexão via corsproxy.io bem-sucedida');
+                    return await response.json();
+                } else {
+                    console.warn(`corsproxy.io falhou: ${response.status}`);
+                }
+            } catch (error) {
+                console.warn('Erro no proxy corsproxy.io:', error);
+            }
+
+            // 4. Verificar cache como último recurso
+            try {
+                const cacheKey = typeof CONFIG !== 'undefined' ?
+                    CONFIG.CACHE.KEYS.CHURCHES_DATA : 'churchesData';
+                const cachedData = localStorage.getItem(cacheKey);
+
+                if (cachedData) {
+                    console.log('Usando dados em cache como último recurso');
+                    return JSON.parse(cachedData);
+                }
+            } catch (error) {
+                console.warn('Erro ao acessar cache:', error);
+            }
+
+            // Se chegou aqui, todos os métodos falharam
+            throw new Error('Não foi possível carregar os dados por nenhum método');
         }
     </script>
 </body>

@@ -19,6 +19,34 @@ def obter_tabelas_local():
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tabelas = [row[0] for row in cursor.fetchall() if row[0] != 'sqlite_sequence']
     conn.close()
+    
+    # Verificar se churches está entre as tabelas
+    if 'churches' not in tabelas:
+        print("AVISO: Tabela 'churches' não encontrada no banco local!")
+        # Tentar criar a tabela
+        try:
+            print("Tentando criar tabela 'churches' automaticamente...")
+            conn = sqlite3.connect(BANCO_LOCAL)
+            cursor = conn.cursor()
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS churches (
+                id TEXT PRIMARY KEY,
+                nome TEXT,
+                morada TEXT,
+                ano TEXT,
+                agendamento TEXT,
+                autorizadoFilippi TEXT,
+                arquivada INTEGER DEFAULT 0,
+                dados TEXT
+            )
+            ''')
+            conn.commit()
+            conn.close()
+            print("Tabela 'churches' criada com sucesso!")
+            tabelas.append('churches')
+        except Exception as e:
+            print(f"Erro ao criar tabela 'churches': {e}")
+    
     return tabelas
 
 def obter_tabelas_render():
