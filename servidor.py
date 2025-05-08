@@ -3,6 +3,7 @@ import sqlite3
 import os
 import json
 from flask_cors import CORS
+import sys
 
 app = Flask(__name__)
 
@@ -16,23 +17,45 @@ CORS(app, resources={r"/*": {
 }}, supports_credentials=True)
 
 # Configuração do banco de dados
-# Se estiver no ambiente Render, o banco fica em /etc/secrets/
-# Em ambiente de desenvolvimento, usamos o caminho local
+# Preferimos usar um local que sabemos que terá permissões de escrita
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
     # Caminho padrão para ambiente local
     if os.name == 'nt':  # Windows
         DATABASE_URL = 'C:\\sqlite\\meu_banco.db'
     else:  # Linux, Mac
-        DATABASE_URL = '/etc/secrets/meu_banco.db'
+        DATABASE_URL = '/tmp/sqlite/meu_banco.db'
     
 print(f"Usando banco de dados em: {DATABASE_URL}")
+print(f"Python versão: {sys.version}")
+print(f"Diretório atual: {os.getcwd()}")
+print(f"Variáveis de ambiente: {os.environ.keys()}")
 
 # Função para obter conexão com o banco
 def get_db_connection():
-    conn = sqlite3.connect(DATABASE_URL)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        # Verifica se o diretório do banco de dados existe
+        db_dir = os.path.dirname(DATABASE_URL)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Criado diretório {db_dir}")
+
+        # Verificar se o banco pode ser acessado
+        is_new_db = not os.path.exists(DATABASE_URL)
+        
+        # Criar conexão
+        conn = sqlite3.connect(DATABASE_URL)
+        conn.row_factory = sqlite3.Row
+        
+        if is_new_db:
+            print(f"Banco de dados criado em {DATABASE_URL}")
+            
+        return conn
+    except Exception as e:
+        print(f"ERRO ao conectar ao banco de dados: {str(e)}")
+        print(f"Verificando permissões do diretório: {os.access(db_dir, os.W_OK)}")
+        print(f"Verificando permissões do arquivo: {os.access(DATABASE_URL, os.W_OK) if os.path.exists(DATABASE_URL) else 'arquivo não existe'}")
+        raise
 
 # Garantir que o banco de dados tenha a tabela 'churches'
 def ensure_tables_exist():
@@ -40,6 +63,11 @@ def ensure_tables_exist():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Listar tabelas existentes antes
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tabelas_antes = [row['name'] for row in cursor.fetchall() if row['name'] != 'sqlite_sequence']
+        print(f"Tabelas existentes antes: {tabelas_antes}")
         
         # Criar tabela churches se não existir
         cursor.execute('''
@@ -54,6 +82,11 @@ def ensure_tables_exist():
             dados TEXT
         )
         ''')
+        
+        # Listar tabelas existentes depois
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tabelas_depois = [row['name'] for row in cursor.fetchall() if row['name'] != 'sqlite_sequence']
+        print(f"Tabelas existentes depois: {tabelas_depois}")
         
         # Verificar se há registros na tabela churches
         cursor.execute("SELECT COUNT(*) FROM churches")
@@ -83,6 +116,24 @@ def ensure_tables_exist():
         return True
     except Exception as e:
         print(f"ERRO ao inicializar banco de dados: {str(e)}")
+        # Exibir mais informações para diagnóstico
+        try:
+            # Verificar se o diretório existe
+            db_dir = os.path.dirname(DATABASE_URL)
+            print(f"Diretório do banco existe? {os.path.exists(db_dir)}")
+            if os.path.exists(db_dir):
+                print(f"Conteúdo do diretório: {os.listdir(db_dir)}")
+                print(f"Permissões do diretório: {os.stat(db_dir)}")
+            
+            # Verificar se o arquivo existe
+            if os.path.exists(DATABASE_URL):
+                print(f"Arquivo do banco existe? Sim")
+                print(f"Permissões do arquivo: {os.stat(DATABASE_URL)}")
+            else:
+                print(f"Arquivo do banco existe? Não")
+        except Exception as debug_error:
+            print(f"Erro durante diagnóstico: {str(debug_error)}")
+        
         return False
 
 # Adicionar cabeçalhos CORS a todas as respostas
