@@ -16,7 +16,17 @@ CORS(app, resources={r"/*": {
 }}, supports_credentials=True)
 
 # Configuração do banco de dados
-DATABASE_URL = os.environ.get('DATABASE_URL', 'C:\\sqlite\\meu_banco.db')
+# Se estiver no ambiente Render, o banco fica em /etc/secrets/
+# Em ambiente de desenvolvimento, usamos o caminho local
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    # Caminho padrão para ambiente local
+    if os.name == 'nt':  # Windows
+        DATABASE_URL = 'C:\\sqlite\\meu_banco.db'
+    else:  # Linux, Mac
+        DATABASE_URL = '/etc/secrets/meu_banco.db'
+    
+print(f"Usando banco de dados em: {DATABASE_URL}")
 
 # Função para obter conexão com o banco
 def get_db_connection():
@@ -26,46 +36,54 @@ def get_db_connection():
 
 # Garantir que o banco de dados tenha a tabela 'churches'
 def ensure_tables_exist():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Criar tabela churches se não existir
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS churches (
-        id TEXT PRIMARY KEY,
-        nome TEXT,
-        morada TEXT,
-        ano TEXT,
-        agendamento TEXT,
-        autorizadoFilippi TEXT,
-        arquivada INTEGER DEFAULT 0,
-        dados TEXT
-    )
-    ''')
-    
-    # Verificar se há registros na tabela churches
-    cursor.execute("SELECT COUNT(*) FROM churches")
-    count = cursor.fetchone()[0]
-    
-    # Se não houver registros, adicionar um exemplo
-    if count == 0:
+    print(f"Inicializando banco de dados em: {DATABASE_URL}")
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Criar tabela churches se não existir
         cursor.execute('''
-        INSERT INTO churches (id, nome, morada, ano, agendamento, autorizadoFilippi, arquivada, dados)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            'demo1', 
-            'Igreja Exemplo', 
-            'Rua de Exemplo, 123', 
-            '2023', 
-            'Sim', 
-            'Sim', 
-            0, 
-            json.dumps({"info": "Dados de exemplo para teste"})
-        ))
-    
-    conn.commit()
-    conn.close()
-    print(f"Banco de dados inicializado em {DATABASE_URL}")
+        CREATE TABLE IF NOT EXISTS churches (
+            id TEXT PRIMARY KEY,
+            nome TEXT,
+            morada TEXT,
+            ano TEXT,
+            agendamento TEXT,
+            autorizadoFilippi TEXT,
+            arquivada INTEGER DEFAULT 0,
+            dados TEXT
+        )
+        ''')
+        
+        # Verificar se há registros na tabela churches
+        cursor.execute("SELECT COUNT(*) FROM churches")
+        count = cursor.fetchone()[0]
+        print(f"Encontrados {count} registros na tabela churches")
+        
+        # Se não houver registros, adicionar um exemplo
+        if count == 0:
+            print("Adicionando registro de exemplo na tabela churches")
+            cursor.execute('''
+            INSERT INTO churches (id, nome, morada, ano, agendamento, autorizadoFilippi, arquivada, dados)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                'demo1', 
+                'Igreja Exemplo', 
+                'Rua de Exemplo, 123', 
+                '2023', 
+                'Sim', 
+                'Sim', 
+                0, 
+                json.dumps({"info": "Dados de exemplo para teste"})
+            ))
+        
+        conn.commit()
+        conn.close()
+        print(f"Banco de dados inicializado com sucesso em {DATABASE_URL}")
+        return True
+    except Exception as e:
+        print(f"ERRO ao inicializar banco de dados: {str(e)}")
+        return False
 
 # Adicionar cabeçalhos CORS a todas as respostas
 @app.after_request
